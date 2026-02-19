@@ -1,0 +1,27 @@
+{
+  "name": "@cyberpulse/server",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cyberpulse/shared": "workspace:*",
+    "fastify": "^5",
+    "@fastify/websocket": "^11",
+    "@fastify/cors": "^10",
+    "ioredis": "^5",
+    "pg": "^8",
+    "node-cron": "^3"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "tsx": "^4",
+    "@types/node": "^22",
+    "@types/pg": "^8"
+  }
+}

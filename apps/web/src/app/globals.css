@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+:root {
+  --bg-primary: #050a12;
+  --bg-panel: rgba(10, 14, 23, 0.85);
+  --border-glow: rgba(0, 188, 212, 0.3);
+  --text-primary: #e0e6ed;
+  --text-secondary: #6b7a8d;
+  --accent-cyan: #00bcd4;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+}
