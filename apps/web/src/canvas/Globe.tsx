@@ -1,18 +1,44 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import * as THREE from 'three'
+import { ThreeEvent } from '@react-three/fiber'
 import GeoJsonGeometry from 'three-geojson-geometry'
 import * as topojson from 'topojson-client'
 import type { Topology, GeometryCollection } from 'topojson-specification'
+import { vector3ToLatLon } from '@/lib/geoUtils'
+import { useAttackStore } from '@/lib/attackStore'
 
 const GLOBE_RADIUS = 1
 
+// Simple reverse geocode: given lat/lon, find nearest country from our known list
+const COUNTRY_CENTROIDS: [string, number, number][] = [
+  ['CN', 35.86, 104.2], ['RU', 61.52, 105.32], ['US', 37.09, -95.71],
+  ['BR', -14.24, -51.93], ['IN', 20.59, 78.96], ['DE', 51.17, 10.45],
+  ['GB', 55.38, -3.44], ['JP', 36.2, 138.25], ['FR', 46.23, 2.21],
+  ['KR', 35.91, 127.77], ['NL', 52.13, 5.29], ['UA', 48.38, 31.17],
+  ['IR', 32.43, 53.69], ['VN', 14.06, 108.28], ['AU', -25.27, 133.78],
+  ['CA', 56.13, -106.35], ['SG', 1.35, 103.82], ['ZA', -30.56, 22.94],
+  ['AR', -38.42, -63.62], ['NG', 9.08, 8.68],
+]
+
+function findNearestCountry(lat: number, lon: number): string | null {
+  let closest = ''
+  let minDist = Infinity
+  for (const [code, clat, clon] of COUNTRY_CENTROIDS) {
+    const d = Math.sqrt((lat - clat) ** 2 + (lon - clon) ** 2)
+    if (d < minDist) {
+      minDist = d
+      closest = code
+    }
+  }
+  return minDist < 30 ? closest : null
+}
+
 export default function Globe() {
   const groupRef = useRef<THREE.Group>(null)
-  const [countryLines, setCountryLines] = useState<THREE.BufferGeometry | null>(
-    null
-  )
+  const [countryLines, setCountryLines] = useState<THREE.BufferGeometry | null>(null)
+  const setSelectedCountry = useAttackStore((s) => s.setSelectedCountry)
 
   useEffect(() => {
     fetch('/geo/countries-110m.json')
@@ -23,7 +49,6 @@ export default function Globe() {
           topology.objects.countries as GeometryCollection
         )
 
-        // Merge all country geometries into one LineSegments geometry
         const geometries: THREE.BufferGeometry[] = []
         for (const feature of countries.features) {
           if (feature.geometry) {
@@ -36,16 +61,25 @@ export default function Globe() {
         if (geometries.length > 0) {
           const merged = mergeBufferGeometries(geometries)
           if (merged) setCountryLines(merged)
-          // Dispose individual geometries
           geometries.forEach((g) => g.dispose())
         }
       })
   }, [])
 
+  const handleClick = useCallback(
+    (event: ThreeEvent<MouseEvent>) => {
+      event.stopPropagation()
+      const point = event.point
+      const { lat, lon } = vector3ToLatLon(point)
+      const country = findNearestCountry(lat, lon)
+      setSelectedCountry(country)
+    },
+    [setSelectedCountry]
+  )
+
   return (
     <group ref={groupRef}>
-      {/* Globe sphere */}
-      <mesh>
+      <mesh onClick={handleClick}>
         <icosahedronGeometry args={[GLOBE_RADIUS, 48]} />
         <meshStandardMaterial
           color="#0a0e17"
@@ -54,7 +88,6 @@ export default function Globe() {
         />
       </mesh>
 
-      {/* Country borders */}
       {countryLines && (
         <lineSegments geometry={countryLines}>
           <lineBasicMaterial
@@ -69,9 +102,6 @@ export default function Globe() {
   )
 }
 
-/**
- * Merge multiple buffer geometries into one.
- */
 function mergeBufferGeometries(
   geometries: THREE.BufferGeometry[]
 ): THREE.BufferGeometry | null {
@@ -96,9 +126,6 @@ function mergeBufferGeometries(
   }
 
   const merged = new THREE.BufferGeometry()
-  merged.setAttribute(
-    'position',
-    new THREE.BufferAttribute(mergedPositions, 3)
-  )
+  merged.setAttribute('position', new THREE.BufferAttribute(mergedPositions, 3))
   return merged
 }

@@ -14,6 +14,7 @@ interface AttackStore {
   topTargets: CountryCount[]
   activeFilters: Set<AttackType>
   connected: boolean
+  selectedCountry: string | null
 
   addAttacks: (events: AttackEvent[]) => void
   setStats: (stats: {
@@ -25,6 +26,7 @@ interface AttackStore {
   }) => void
   toggleFilter: (type: AttackType) => void
   setConnected: (connected: boolean) => void
+  setSelectedCountry: (country: string | null) => void
 }
 
 export const useAttackStore = create<AttackStore>((set) => ({
@@ -43,6 +45,7 @@ export const useAttackStore = create<AttackStore>((set) => ({
     'phishing',
   ]),
   connected: false,
+  selectedCountry: null,
 
   addAttacks: (events) => {
     set((state) => {
@@ -74,4 +77,5 @@ export const useAttackStore = create<AttackStore>((set) => ({
   },
 
   setConnected: (connected) => set({ connected }),
+  setSelectedCountry: (country) => set({ selectedCountry: country }),
 }))

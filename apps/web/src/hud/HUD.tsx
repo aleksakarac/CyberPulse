@@ -5,6 +5,8 @@ import StatsBar from './StatsBar'
 import { AttackerRank, TargetRank } from './CountryRank'
 import EventTicker from './EventTicker'
 import Legend from './Legend'
+import CountryDetail from './CountryDetail'
+import TimeControls from './TimeControls'
 import { useAttackStore } from '@/lib/attackStore'
 import type { CountryCount } from '@cyberpulse/shared'
 
@@ -56,6 +58,8 @@ export default function HUD() {
       <StatsBar />
       <AttackerRank />
       <TargetRank />
+      <CountryDetail />
+      <TimeControls />
       <EventTicker />
       <Legend />
     </div>
