@@ -75,6 +75,9 @@ importers:
       next:
         specifier: ^15
         version: 15.5.12(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      postprocessing:
+        specifier: ^6.38.2
+        version: 6.38.2(three@0.172.0)
       react:
         specifier: ^19
         version: 19.2.4

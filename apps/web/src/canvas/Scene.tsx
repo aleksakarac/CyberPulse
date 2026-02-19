@@ -1,8 +1,16 @@
 'use client'
 
+import { Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
-import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing'
+import {
+  EffectComposer,
+  Bloom,
+  Vignette,
+  ChromaticAberration,
+  Noise,
+} from '@react-three/postprocessing'
+import { BlendFunction } from 'postprocessing'
 import Globe from './Globe'
 import Atmosphere from './Atmosphere'
 import Stars from './Stars'
@@ -12,21 +20,17 @@ import { useAttackStore } from '@/lib/attackStore'
 import { useAttackStream } from '@/hooks/useAttackStream'
 import { useFallbackMockData } from '@/hooks/useFallbackMockData'
 
-export default function Scene() {
-  // Connect to WebSocket — falls back to mock data if server unavailable
+function SceneContent() {
   useAttackStream()
   useFallbackMockData()
 
   const attacks = useAttackStore((s) => s.attacks)
 
   return (
-    <Canvas
-      camera={{ position: [0, 0, 2.5], fov: 45, near: 0.1, far: 100 }}
-      gl={{ antialias: true, alpha: false }}
-      style={{ background: '#050a12' }}
-    >
-      <ambientLight intensity={0.15} />
-      <directionalLight position={[5, 3, 5]} intensity={0.8} />
+    <>
+      <ambientLight intensity={0.12} />
+      <directionalLight position={[5, 3, 5]} intensity={0.7} color="#aaccff" />
+      <directionalLight position={[-3, -1, -5]} intensity={0.15} color="#4466aa" />
 
       <Globe />
       <Atmosphere />
@@ -46,12 +50,37 @@ export default function Scene() {
 
       <EffectComposer>
         <Bloom
-          luminanceThreshold={0.2}
+          luminanceThreshold={0.15}
           luminanceSmoothing={0.9}
-          intensity={1.2}
+          intensity={1.5}
+          mipmapBlur
         />
-        <Vignette offset={0.3} darkness={0.85} />
+        <ChromaticAberration
+          blendFunction={BlendFunction.NORMAL}
+          offset={[0.0008, 0.0008] as any}
+          radialModulation={true}
+          modulationOffset={0.5}
+        />
+        <Noise
+          blendFunction={BlendFunction.SOFT_LIGHT}
+          opacity={0.04}
+        />
+        <Vignette offset={0.35} darkness={0.9} />
       </EffectComposer>
+    </>
+  )
+}
+
+export default function Scene() {
+  return (
+    <Canvas
+      camera={{ position: [0, 0, 2.5], fov: 45, near: 0.1, far: 100 }}
+      gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
+      style={{ background: '#050a12' }}
+    >
+      <Suspense fallback={null}>
+        <SceneContent />
+      </Suspense>
     </Canvas>
   )
 }
