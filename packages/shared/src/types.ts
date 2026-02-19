@@ -32,3 +32,21 @@ export const ATTACK_LABELS: Record<AttackType, string> = {
   scanning: 'Scanning',
   phishing: 'Phishing',
 }
+
+export interface WsMessage {
+  type: 'attack' | 'batch' | 'stats'
+  data: AttackEvent | AttackEvent[] | StatsSnapshot
+}
+
+export interface StatsSnapshot {
+  total24h: number
+  total1h: number
+  perSecond: number
+  topSources: CountryCount[]
+  topTargets: CountryCount[]
+}
+
+export interface CountryCount {
+  country: string
+  count: number
+}

@@ -11,17 +11,18 @@
   },
   "dependencies": {
     "@cyberpulse/shared": "workspace:*",
-    "fastify": "^5",
-    "@fastify/websocket": "^11",
     "@fastify/cors": "^10",
+    "@fastify/websocket": "^11",
+    "fastify": "^5",
     "ioredis": "^5",
-    "pg": "^8",
-    "node-cron": "^3"
+    "node-cron": "^3",
+    "pg": "^8"
   },
   "devDependencies": {
-    "typescript": "^5",
-    "tsx": "^4",
     "@types/node": "^22",
-    "@types/pg": "^8"
+    "@types/pg": "^8",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4",
+    "typescript": "^5"
   }
 }
