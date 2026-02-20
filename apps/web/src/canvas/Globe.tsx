@@ -3,12 +3,11 @@
 import { useEffect, useRef, useCallback } from 'react'
 import * as THREE from 'three'
 import { ThreeEvent, useFrame } from '@react-three/fiber'
-import GeoJsonGeometry from 'three-geojson-geometry'
 import * as topojson from 'topojson-client'
 import type { Topology, GeometryCollection } from 'topojson-specification'
-import { geoContains } from 'd3-geo'
+import { geoContains, geoInterpolate } from 'd3-geo'
 import type { GeoPermissibleObjects } from 'd3-geo'
-import { vector3ToLatLon } from '@/lib/geoUtils'
+import { latLonToVector3, vector3ToLatLon } from '@/lib/geoUtils'
 import { useAttackStore } from '@/lib/attackStore'
 
 const GLOBE_RADIUS = 1
@@ -32,6 +31,68 @@ const highlightMaterial = new THREE.LineBasicMaterial({
   depthTest: false,
 })
 
+/** Max degrees between points before we subdivide with great circle interpolation */
+const MAX_SEGMENT_DEG = 2
+
+/**
+ * Convert an array of [lon, lat] coordinate rings into LineSegments geometry.
+ * Long segments are subdivided along great circle arcs so they follow the sphere surface.
+ */
+function ringsToLineSegments(rings: number[][][], radius: number): THREE.BufferGeometry {
+  const verts: number[] = []
+  for (const ring of rings) {
+    for (let i = 0; i < ring.length - 1; i++) {
+      const p1 = ring[i]
+      const p2 = ring[i + 1]
+      const dlon = Math.abs(p2[0] - p1[0])
+      const dlat = Math.abs(p2[1] - p1[1])
+      const dist = Math.sqrt(dlon * dlon + dlat * dlat)
+
+      if (dist <= MAX_SEGMENT_DEG) {
+        // Short segment — draw directly
+        const v1 = latLonToVector3(p1[1], p1[0], radius)
+        const v2 = latLonToVector3(p2[1], p2[0], radius)
+        verts.push(v1.x, v1.y, v1.z, v2.x, v2.y, v2.z)
+      } else {
+        // Long segment — subdivide along great circle
+        const steps = Math.ceil(dist / MAX_SEGMENT_DEG)
+        const interp = geoInterpolate(p1 as [number, number], p2 as [number, number])
+        for (let s = 0; s < steps; s++) {
+          const a = interp(s / steps)
+          const b = interp((s + 1) / steps)
+          const v1 = latLonToVector3(a[1], a[0], radius)
+          const v2 = latLonToVector3(b[1], b[0], radius)
+          verts.push(v1.x, v1.y, v1.z, v2.x, v2.y, v2.z)
+        }
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3))
+  return geo
+}
+
+/**
+ * Extract all coordinate rings from a Polygon or MultiPolygon geometry.
+ */
+function extractRings(geometry: GeoPermissibleObjects): number[][][] {
+  const rings: number[][][] = []
+  if (geometry.type === 'Polygon') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const ring of (geometry as any).coordinates) {
+      rings.push(ring)
+    }
+  } else if (geometry.type === 'MultiPolygon') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const polygon of (geometry as any).coordinates) {
+      for (const ring of polygon) {
+        rings.push(ring)
+      }
+    }
+  }
+  return rings
+}
+
 export default function Globe() {
   const groupRef = useRef<THREE.Group>(null)
   const highlightRef = useRef<THREE.LineSegments | null>(null)
@@ -40,58 +101,60 @@ export default function Globe() {
   const hoveredCountryRef = useRef<string | null>(null)
   const setSelectedCountry = useAttackStore((s) => s.setSelectedCountry)
 
-  // Load country geometries
   useEffect(() => {
     fetch('/geo/countries-110m.json')
       .then((res) => res.json())
       .then((topology: Topology) => {
+        if (!groupRef.current) return
+
+        // Build all-borders geometry using topojson.mesh (gives clean MultiLineString)
+        const bordersMesh = topojson.mesh(
+          topology,
+          topology.objects.countries as GeometryCollection
+        )
+        // bordersMesh.type === 'MultiLineString'
+        // bordersMesh.coordinates is an array of line strings
+        const borderGeo = ringsToLineSegments(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (bordersMesh as any).coordinates,
+          GLOBE_RADIUS
+        )
+        groupRef.current.add(new THREE.LineSegments(
+          borderGeo,
+          new THREE.LineBasicMaterial({ color: '#1e5a9a', transparent: true, opacity: 0.6 })
+        ))
+
+        // Build per-country features for hover detection + highlight geometry
         const countries = topojson.feature(
           topology,
           topology.objects.countries as GeometryCollection
         )
-
-        const allGeometries: THREE.BufferGeometry[] = []
         const perCountry = new Map<string, THREE.BufferGeometry>()
         const features: CountryFeature[] = []
 
         for (const feature of countries.features) {
           if (!feature.geometry) continue
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const geo = new GeoJsonGeometry(feature.geometry as any, GLOBE_RADIUS, 2)
-          allGeometries.push(geo)
-
           const alpha2 = NUM_TO_ALPHA2[String(feature.id)]
-          if (alpha2) {
-            // Slightly larger radius for hover so it renders above base borders
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const hoverGeo = new GeoJsonGeometry(feature.geometry as any, GLOBE_RADIUS * 1.003, 2)
-            perCountry.set(alpha2, hoverGeo)
-            features.push({ alpha2, geometry: feature.geometry as GeoPermissibleObjects })
+          if (!alpha2) continue
+
+          features.push({ alpha2, geometry: feature.geometry as GeoPermissibleObjects })
+
+          // Build hover highlight geometry from polygon rings
+          const rings = extractRings(feature.geometry as GeoPermissibleObjects)
+          if (rings.length > 0) {
+            perCountry.set(alpha2, ringsToLineSegments(rings, GLOBE_RADIUS * 1.003))
           }
         }
 
         countryGeoMapRef.current = perCountry
         countryFeaturesRef.current = features
 
-        if (allGeometries.length > 0 && groupRef.current) {
-          const merged = mergeBufferGeometries(allGeometries)
-          if (merged) {
-            groupRef.current.add(new THREE.LineSegments(
-              merged,
-              new THREE.LineBasicMaterial({ color: '#1e5a9a', transparent: true, opacity: 0.6 })
-            ))
-          }
-          allGeometries.forEach((g) => g.dispose())
-        }
-
         // Create highlight mesh (initially invisible)
-        if (groupRef.current) {
-          const highlight = new THREE.LineSegments(new THREE.BufferGeometry(), highlightMaterial)
-          highlight.visible = false
-          highlight.renderOrder = 1
-          groupRef.current.add(highlight)
-          highlightRef.current = highlight
-        }
+        const highlight = new THREE.LineSegments(new THREE.BufferGeometry(), highlightMaterial)
+        highlight.visible = false
+        highlight.renderOrder = 1
+        groupRef.current.add(highlight)
+        highlightRef.current = highlight
       })
       .catch((err) => console.error('Failed to load country borders:', err))
   }, [])
@@ -103,7 +166,6 @@ export default function Globe() {
     return null
   }, [])
 
-  // Update highlight visual in render loop (imperative, no React re-renders)
   useFrame(() => {
     const highlight = highlightRef.current
     if (!highlight) return
@@ -140,13 +202,13 @@ export default function Globe() {
 
   return (
     <group ref={groupRef}>
-      {/* Visual globe — high detail, no pointer events */}
+      {/* Visual globe */}
       <mesh raycast={() => null}>
         <icosahedronGeometry args={[GLOBE_RADIUS, 48]} />
         <meshStandardMaterial color="#0a0e17" roughness={0.8} metalness={0.1} />
       </mesh>
 
-      {/* Hit-test sphere — low poly, fully transparent but still raycastable */}
+      {/* Hit-test sphere — low poly, transparent, handles pointer events */}
       <mesh
         onPointerMove={handlePointerMove}
         onClick={handleClick}
@@ -157,29 +219,4 @@ export default function Globe() {
       </mesh>
     </group>
   )
-}
-
-function mergeBufferGeometries(
-  geometries: THREE.BufferGeometry[]
-): THREE.BufferGeometry | null {
-  let totalVertices = 0
-  for (const geo of geometries) {
-    const pos = geo.getAttribute('position')
-    if (pos) totalVertices += pos.count
-  }
-  if (totalVertices === 0) return null
-
-  const mergedPositions = new Float32Array(totalVertices * 3)
-  let offset = 0
-  for (const geo of geometries) {
-    const pos = geo.getAttribute('position')
-    if (pos) {
-      mergedPositions.set(pos.array as Float32Array, offset)
-      offset += pos.array.length
-    }
-  }
-
-  const merged = new THREE.BufferGeometry()
-  merged.setAttribute('position', new THREE.BufferAttribute(mergedPositions, 3))
-  return merged
 }
