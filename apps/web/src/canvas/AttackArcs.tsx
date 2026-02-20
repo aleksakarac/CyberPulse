@@ -186,7 +186,7 @@ export default function AttackArcs({ attacks }: AttackArcsProps) {
     // Update all active arcs
     for (let i = 0; i < MAX_ARCS; i++) {
       const arc = arcsRef.current[i]
-      if (!arc.active) continue
+      if (!arc?.active) continue
 
       const elapsed = now - arc.startTime
       if (elapsed > TOTAL_DURATION) {
