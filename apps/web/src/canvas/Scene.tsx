@@ -52,7 +52,7 @@ function SceneContent() {
         <Bloom
           luminanceThreshold={0.15}
           luminanceSmoothing={0.9}
-          intensity={1.5}
+          intensity={1.0}
           mipmapBlur
         />
         <ChromaticAberration

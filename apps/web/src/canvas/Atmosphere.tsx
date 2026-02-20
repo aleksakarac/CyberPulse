@@ -13,7 +13,7 @@ export default function Atmosphere() {
         fragmentShader: atmosphereFrag,
         uniforms: {
           uColor: { value: new THREE.Color('#4da6ff') },
-          uIntensity: { value: 1.2 },
+          uIntensity: { value: 0.7 },
         },
         transparent: true,
         blending: THREE.AdditiveBlending,
@@ -25,7 +25,7 @@ export default function Atmosphere() {
 
   return (
     <mesh material={material}>
-      <sphereGeometry args={[1.08, 64, 64]} />
+      <sphereGeometry args={[1.12, 64, 64]} />
     </mesh>
   )
 }
